@@ -6,7 +6,7 @@
 #include <string.h>     // 문자열 함수 (strcmp) 사용을 위해 포함.
 
 #define PTS_PATH "/dev/pts/"                  // 가상 터미널 장치 파일들이 위치한 경로 정의.
-#define MAX_PATH 256                          // 파일 경로를 저장할 버퍼의 최대 크기 정의.
+#define MAX_PATH 266                          // 파일 경로를 저장할 버퍼의 최대 크기 정의.
 #define MAX_FORMATTED_MESSAGE_LENGTH 1024     // 포맷된 메시지를 저장할 버퍼의 최대 크기 정의.
 
 int main(int argc, char *argv[])              // 메인 함수: argc (인수 개수), argv (인수 문자열 배열).
