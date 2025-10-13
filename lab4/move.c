@@ -1,67 +1,131 @@
-#include <curses.h>
-#include <signal.h>
-#include <stdlib.h>
+/*
+ * [프로그램 목적 및 핵심 개념]
+ * 이 프로그램은 ncurses 라이브러리를 사용하여 터미널 창 안에서 사용자가 문자를 이동시키는 간단한 애플리케이션입니다.
+ * 가장 중요한 특징은 터미널 창의 크기가 변경될 때마다 이를 감지하고 화면을 다시 그려, 프로그램이 깨지지 않고
+ * 동적으로 반응하도록 만드는 것입니다.
+ *
+ * [주요 학습 포인트]
+ * 1. ncurses 라이브러리 기초: 터미널을 그래픽적으로 제어하기 위한 초기화, 화면 그리기, 사용자 입력 받기, 종료 처리 방법을 배웁니다.
+ * 2. 시그널 핸들링 (SIGWINCH): 'SIGnal WINdow CHange'의 약자로, 터미널 창 크기가 변경될 때 운영체제가
+ * 프로세스에 보내는 시그널입니다. 이 시그널을 잡아내어 화면을 재구성하는 방법을 학습합니다.
+ * 3. 반응형(Responsive) 프로그래밍: 정적인 화면이 아니라, 외부 환경(여기서는 터미널 크기)의 변화에
+ * 실시간으로 대응하는 프로그램의 기본 구조를 이해할 수 있습니다.
+ */
 
-int x = 10, y = 5;
-int max_x, max_y;
+// ======================= 헤더 파일 포함 (Header Inclusion) =======================
+#include <curses.h> // ncurses 라이브러리 함수(initscr, mvaddch 등)를 사용하기 위해 포함합니다. (macOS에서는 ncurses.h)
+#include <signal.h> // 시그널 처리(signal, SIGWINCH)를 위해 포함합니다.
+#include <stdlib.h> // 표준 라이브러리 함수를 위해 포함합니다. (이 코드에서는 직접 사용되지 않지만 일반적인 습관)
 
+// ======================= 전역 변수 선언 (Global Variables) =======================
+int x = 10, y = 5;      // 플레이어('@')의 현재 좌표 (x: 가로, y: 세로)
+int max_x, max_y;       // 터미널 창의 최대 가로(max_x), 세로(max_y) 크기를 저장할 변수
+// * 전역 변수로 선언한 이유: main 함수와 시그널 핸들러인 handle_resize 함수 모두에서
+// 이 변수들에 접근하고 수정해야 하므로, 함수 외부(전역 스코프)에 선언하여 공유합니다.
+
+// ======================= 함수 정의 (Function Definitions) =======================
+
+/**
+ * @brief 터미널 창 가장자리에 벽('#')을 그리는 함수입니다.
+ * * [이 함수가 필요한 이유]
+ * - 기능의 모듈화: 벽을 그리는 로직을 별도의 함수로 분리하여 main 함수의 game loop를 더 깔끔하고 읽기 쉽게 만듭니다.
+ * - 재사용성: 화면을 다시 그려야 할 때마다 이 함수를 호출하기만 하면 됩니다.
+ */
 void draw_walls() {
+    // [문법: 반복문] for 루프를 사용하여 화면 너비(max_x)만큼 반복합니다.
     for (int i = 0; i < max_x; i++) {
-        mvaddch(0, i, '#');
-        mvaddch(max_y - 1, i, '#');
+        mvaddch(0, i, '#');         // [ncurses] 맨 윗줄(y=0)에 벽('#')을 그립니다.
+        mvaddch(max_y - 1, i, '#'); // [ncurses] 맨 아랫줄(y=max_y-1)에 벽('#')을 그립니다.
     }
+    // [문법: 반복문] for 루프를 사용하여 화면 높이(max_y)만큼 반복합니다.
     for (int i = 0; i < max_y; i++) {
-        mvaddch(i, 0, '#');
-        mvaddch(i, max_x - 1, '#');
+        mvaddch(i, 0, '#');         // [ncurses] 맨 왼쪽 줄(x=0)에 벽('#')을 그립니다.
+        mvaddch(i, max_x - 1, '#'); // [ncurses] 맨 오른쪽 줄(x=max_x-1)에 벽('#')을 그립니다.
     }
 }
 
+/**
+ * @brief SIGWINCH 시그널을 처리하는 핸들러. 터미널 크기가 변경될 때 호출됩니다.
+ * @param sig 수신된 시그널 번호 (이 경우 항상 SIGWINCH)
+ * * [이 함수가 중요한 이유]
+ * - ncurses는 터미널 크기 변경을 자동으로 처리하지 못합니다. 크기가 바뀌면 내부 상태와 실제 터미널이 불일치하여
+ * 화면이 깨지게 됩니다. 이 핸들러는 그 불일치를 해결하고 상태를 동기화하는 핵심적인 역할을 합니다.
+ */
 void handle_resize(int sig) {
+    // [ncurses] ncurses 모드를 잠시 종료하여 터미널을 표준 상태로 되돌립니다.
+    // 이는 ncurses 내부의 화면 크기 정보를 안정적으로 갱신하기 위한 표준 절차입니다.
     endwin();
+    // [ncurses] 터미널 화면을 물리적으로 갱신합니다. endwin()의 효과를 적용합니다.
     refresh();
+    // [ncurses] ncurses의 내부 버퍼(가상 스크린)를 지웁니다.
     clear();
 
+    // [ncurses: 핵심 함수] getmaxyx(창, y변수, x변수)는 현재 터미널 창의 크기를 얻어와
+    // 두 번째, 세 번째 인자로 전달된 변수에 그 값을 저장합니다. stdscr은 기본 화면을 의미합니다.
     getmaxyx(stdscr, max_y, max_x);
 
-    if (x >= max_x - 1) x = max_x - 2;
-    if (y >= max_y - 1) y = max_y - 2;
+    // [로직: 경계 검사 및 위치 조정] 창 크기가 줄어들었을 때, 플레이어('@')가 새로운 경계 밖에 위치할 수 있습니다.
+    // 이 코드는 플레이어를 새로운 벽 안쪽으로 강제로 이동시켜 프로그램 오류를 방지합니다.
+    if (x >= max_x - 1) x = max_x - 2; // 플레이어가 오른쪽 벽을 넘었으면 벽 바로 안쪽으로 이동
+    if (y >= max_y - 1) y = max_y - 2; // 플레이어가 아래쪽 벽을 넘었으면 벽 바로 안쪽으로 이동
+
+    // 핸들러가 종료되면, main의 다음 루프가 시작될 때 clear()와 draw_walls()를 통해
+    // 새로운 크기에 맞는 화면을 그리게 됩니다.
 }
 
+// ======================= main 함수: 프로그램의 시작점 =======================
 int main() {
-    int ch;
+    int ch; // 사용자의 키 입력을 저장할 변수
 
-    initscr();
-    noecho();
-    cbreak();
-    curs_set(0);
+    // --- ncurses 초기화 단계 ---
+    initscr();      // [ncurses] 터미널을 ncurses 모드로 전환합니다. 가장 먼저 호출되어야 합니다.
+    noecho();       // [ncurses] 사용자가 입력한 키가 화면에 보이지 않도록(echo) 설정합니다.
+    cbreak();       // [ncurses] 입력 버퍼링을 비활성화합니다. Enter 키 없이도 키를 누르는 즉시 입력을 받습니다.
+                    // (raw()와 유사하지만, cbreak()는 Ctrl+C 같은 시그널 키는 OS가 처리하도록 둡니다.)
+    curs_set(0);    // [ncurses] 커서를 화면에서 보이지 않게 설정합니다. 0: 숨김, 1: 보통, 2: 강조.
 
+    // [ncurses] 프로그램 시작 시의 터미널 크기를 얻어와 전역 변수 max_y, max_x에 저장합니다.
     getmaxyx(stdscr, max_y, max_x);
 
+    // [문법: 시그널 핸들러 등록] 터미널 창 크기가 변경(SIGWINCH)될 때 handle_resize 함수를 호출하도록 OS에 등록합니다.
+    // 이것이 이 프로그램의 반응형 동작을 구현하는 핵심 코드입니다.
     signal(SIGWINCH, handle_resize);
 
+    // --- 메인 게임 루프 ---
+    // [문법: 무한 루프] 'q' 키를 누르기 전까지 계속해서 화면을 그리고 입력을 처리합니다.
     while (1) {
-        clear();
+        clear(); // [ncurses] 매 프레임 시작 시 가상 스크린을 깨끗하게 지웁니다.
 
-        draw_walls();
-        mvaddch(y, x, '@');
+        // --- 그리기(Drawing) 단계 ---
+        draw_walls();               // 정의된 함수를 호출하여 벽을 그립니다.
+        mvaddch(y, x, '@');         // [ncurses] (y, x) 좌표에 플레이어 문자 '@'를 그립니다.
 
+        // [ncurses] mvprintw는 특정 좌표(y,x)에 포맷팅된 문자열을 출력하는 함수입니다. (move + printf)
         mvprintw(1, 2, "Current Position: (%d, %d), Window: (%d, %d)", y, x, max_y, max_x);
         mvprintw(2, 2, "Press W/A/S/D to move. Press 'q' to quit.");
 
-        refresh();
+        refresh(); // [ncurses] 지금까지 가상 스크린에 그린 모든 내용(mvaddch, mvprintw 등)을 실제 터미널에 한 번에 보여줍니다.
 
-        ch = getch();
-        if (ch == 'q') break;
+        // --- 입력 처리(Input Handling) 단계 ---
+        ch = getch();       // [ncurses] 사용자로부터 한 문자를 입력받을 때까지 대기합니다.
+        if (ch == 'q') break; // 입력된 키가 'q'이면 무한 루프를 탈출하여 프로그램을 종료합니다.
 
+        // --- 상태 업데이트(State Update) 단계 ---
+        // [문법: switch문] 입력된 키(ch) 값에 따라 다른 동작을 수행합니다.
         switch (ch) {
-            case 'w': if (y > 1) y--; break;
-            case 's': if (y < max_y - 2) y++; break;
-            case 'a': if (x > 1) x--; break;
-            case 'd': if (x < max_x - 2) x++; break;
-            default: break;
+            // 각 case는 플레이어가 벽 안쪽에서만 움직이도록 경계 조건을 검사합니다.
+            // 벽의 좌표가 0과 max_*-1이므로, 움직일 수 있는 범위는 1부터 max_*-2까지 입니다.
+            case 'w': if (y > 1) y--; break;            // 위로 이동 (y좌표 감소)
+            case 's': if (y < max_y - 2) y++; break;    // 아래로 이동 (y좌표 증가)
+            case 'a': if (x > 1) x--; break;            // 왼쪽으로 이동 (x좌표 감소)
+            case 'd': if (x < max_x - 2) x++; break;    // 오른쪽으로 이동 (x좌표 증가)
+            default: break;                             // W,A,S,D,q가 아닌 다른 키는 무시합니다.
         }
     }
 
+    // --- ncurses 종료 단계 ---
+    // [ncurses] ncurses 모드를 종료하고 터미널을 원래의 일반 모드로 복구합니다.
+    // 이 함수를 호출하지 않으면 프로그램 종료 후 터미널이 비정상적으로 보일 수 있습니다.
     endwin();
-    return 0;
+    return 0; // 프로그램을 정상적으로 종료합니다.
 }
