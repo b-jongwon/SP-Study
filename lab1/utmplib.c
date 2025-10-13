@@ -11,7 +11,8 @@
 static char utmpbuf[NRECS * UTSIZE];    // [정적 버퍼]: utmp 레코드 16개 크기만큼의 데이터를 저장할 버퍼 공간 (4096 / 16 = 256 bytes per struct).
 static int num_recs;                    // [버퍼 메타데이터]: 현재 버퍼(utmpbuf)에 저장된 유효한 레코드의 총 개수.
 static int cur_rec;                     // [버퍼 포인터]: 다음에 사용자에게 반환해야 할 레코드의 버퍼 내 인덱스.
-static int fd_utmp = -1;                // [파일 디스크립터]: 열려 있는 utmp 파일의 FD. -1은 닫혀 있거나 오류 상태를 의미.
+static int fd_utmp = -1;                // [파일 디스크립터]: 열려 있는 utmp 파일의 FD. -1은 닫혀 있거나 오류 상태를 의미. 
+                                         // fd 가 0은 표준입력 
 
 /**
  * utmp_open: utmp 파일을 열고 초기화합니다.
