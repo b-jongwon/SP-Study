@@ -25,7 +25,7 @@ int main()
     }
 
     // utmp_next(): 버퍼링된 utmp 레코드 중 다음 레코드의 포인터를 반환합니다.
-    while ((utbufp = utmp_next()) != ((struct utmp*) NULL)) // utmp_next()가 NULL이 아닌 유효한 레코드를 반환하는 동안 반복.
+    while ((utbufp = utmp_next()) != ((struct utmp*) NULL)) // utmp_next()가 NULL이 아닌 유효한 레코드를 반환하는 동안 반복.  () 는 타입캐스팅.
         show_info(utbufp);                                  // 획득한 레코드 포인터를 show_info 함수에 전달하여 정보 출력.
 
     utmp_close();                       // 모든 작업이 끝난 후 utmp 파일 디스크립터를 닫고 자원을 해제합니다.
